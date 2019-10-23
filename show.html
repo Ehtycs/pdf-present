@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>pdf-present v0.1</title>
+</head>
+<body>
+
+<div align="center">
+<canvas id="the-canvas"></canvas>
+</div>
+<script src="js/pdf.js"></script>
+<script src="js/jquery-3.4.1.js"></script>
+
+<script id="script">
+   //
+   // If absolute URL from the remote server is provided, configure the CORS
+   // header on that server.
+   //
+
+   pdfjsLib.GlobalWorkerOptions.workerSrc =
+     'js/pdf.worker.js';
+
+   var channel = new BroadcastChannel('slides');
+
+   function resetAndOpen(url, done){
+      console.log("resetAndOpen")
+      var loadingTask = pdfjsLib.getDocument(url);
+
+      loadingTask.promise.then(function(pdf) {
+         console.log("loadtask completed")
+         // Fetch the first page
+         pdf.getPage(1).then(function(page) {
+            console.log("rendering")
+            renderPage(page);
+         });
+         done(pdf);
+      });
+   }
+
+   function handleChannelEvents(evt, pdf) {
+      console.log("channel event");
+      console.log(evt)
+      msg = JSON.parse(evt.data);
+      if(msg.hasOwnProperty("toslide")){
+        page = msg["toslide"]
+        console.log("to slide " + page);
+        pdf.getPage(page).then(renderPage)
+      }
+      else if(msg.hasOwnProperty("open")){
+         url = msg["open"];
+         console.log("open "+url)
+         resetAndOpen(url, function(newpdf){
+            channel.onmessage = function(event) {
+               handleChannelEvents(event, newpdf);
+            }
+         });
+      }
+   }
+
+   function renderPage(page) {
+      var viewport = page.getViewport({ scale: 1 });
+      var docWidth = $(document).width()*0.95
+      var docHeight = $(document).height()*0.95
+      var canvas = document.getElementById('the-canvas');
+      var context = canvas.getContext('2d');
+      var scale = Math.min(docHeight/viewport.height, docWidth/viewport.width);
+
+      viewport = page.getViewport({ scale: scale });
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      // Render PDF page into canvas context
+      var renderContext = {
+         canvasContext: context,
+         viewport: viewport,
+      };
+      page.render(renderContext);
+   }
+
+   // initial handler just listens to "open"
+   channel.onmessage = function(event){
+      msg = JSON.parse(event.data);
+      if(msg.hasOwnProperty("open")){
+         url = msg["open"];
+         resetAndOpen(url, function(pdf){
+            channel.onmessage = function(event) {
+               handleChannelEvents(event, pdf);
+            }
+         });
+      }
+   };
+
+</script>
+
+</body>
+</html>

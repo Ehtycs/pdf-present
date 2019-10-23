@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>pdf-present v0.1 - control panel</title>
+</head>
+<body>
+
+<input id="the-file" type="file" name="myFile"></input><br>
+<button id="reset">Open presentation</button>
+
+<p> a - previous, s - next </p>
+
+<p>
+<b> Next slide </b><br>
+<canvas id="next-slide" style="border:1px  solid black" width="25%"></canvas><br>
+</p>
+
+<p>
+<b> Current slide </b><br>
+<canvas id="current-slide" style="border:1px  solid black" width="25%"></canvas><br>
+</p>
+
+<p>
+<b> Previous slide </b><br>
+<canvas id="previous-slide" style="border:1px  solid black" width="25%"></canvas><br>
+</p>
+
+<script src="js/pdf.js"></script>
+<script src="js/jquery-3.4.1.js"></script>
+
+<script id="script">
+  //
+  // If absolute URL from the remote server is provided, configure the CORS
+  // header on that server.
+  //
+
+
+
+  var channel = new BroadcastChannel('slides');
+
+  //var url = 'http://localhost:8000/raumonen.pdf';
+  //
+  // The workerSrc property shall be specified.
+  //
+  nPage = 1;
+
+  var url = "";
+  var baseurl = "http://localhost:8000/";
+
+  nextCanvas = document.getElementById('next-slide');
+  currentCanvas = document.getElementById('current-slide');
+  prevCanvas = document.getElementById('previous-slide');
+
+
+
+
+  function renderPage(canvas, page) {
+        var scale = 0.75;
+        var viewport = page.getViewport({ scale: scale, });
+
+        // Prepare canvas using PDF page dimensions
+        //
+        //var canvas = document.getElementById('the-canvas');
+        var context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        //
+        // Render PDF page into canvas context
+        //
+        var renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+        };
+        page.render(renderContext);
+   }
+
+   $("#reset").click(function(event){
+      var file = $("#the-file");
+      var fname = file[0].files[0].name;
+
+      url = baseurl + fname;
+
+      nPage = 1;
+
+      channel.postMessage(JSON.stringify({open: url}))
+
+      var loadingTask = pdfjsLib.getDocument(url);
+      loadingTask.promise.then(function(pdf) {
+
+         function refresh(npage) {
+            pdf.getPage(npage+1).then(function(page){
+               renderPage(nextCanvas, page);
+            });
+            pdf.getPage(npage).then(function(page){
+               renderPage(currentCanvas, page);
+            });
+            if(npage-1 > 0) {
+               pdf.getPage(npage-1).then(function(page){
+                  renderPage(prevCanvas, page);
+               });
+            }
+         };
+
+         $(document).keypress(function(event) {
+           if(event.key == "s"){
+               console.log("next");
+               nPage = nPage+1
+               channel.postMessage(JSON.stringify({toslide: nPage}))
+               refresh(nPage);
+           }
+           else if(event.key == "a") {
+               console.log("prev");
+               nPage = Math.max(1, nPage-1);
+               channel.postMessage(JSON.stringify({toslide: nPage}))
+               refresh(nPage);
+           }
+         });
+         refresh(nPage);
+      });
+   });
+
+
+</script>
+
+</body>
+</html>
