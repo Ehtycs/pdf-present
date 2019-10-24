@@ -4,27 +4,57 @@
   <meta charset="UTF-8">
   <title>pdf-present v0.1 - control panel</title>
 </head>
-<body>
+<body style="background-color: black; color: white;">
 
-<input id="the-file" type="file" name="myFile"></input><br>
-<button id="reset">Open presentation</button>
+<table width="60%">
+  <tr>
+    <td width="30%">
+      <input id="the-file" type="file" name="myFile"></input>
+    </td>
+    <td rowspan="2" width="35%">
+      <span id="timer-display" style="font-size: 15vmin;"></span>
+    </td>
+    <td rowspan="3" width="35%">
+      <span id="page-count" style="font-size: 15vmin;"></span>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <button id="reset">Open presentation</button>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <form action="show.html" target="_blank">
+        <input type="submit" value="Open show tab" />
+      </form>
+    </td>
+    <td>
+      <button id="timer-start">Start</button>
+      <button id="timer-stop">Stop</button>
+      <button id="timer-reset">Reset</button>
+    </td>
+    <td> </td>
+  </tr>
 
-<p> a - previous, s - next </p>
+  <tr>
+    <td id="next-slide-cont" width="30%">
+      <b> Next slide </b><br>
+      <canvas id="next-slide-canv" style="border:1px  solid black"></canvas>
+    </td>
+    <td rowspan="2" colspan="2" id="current-slide-cont" width="70%">
+      <b> Current slide </b><br>
+      <canvas id="current-slide-canv" style="border:1px  solid black"></canvas>
+    </td>
+  </tr>
+  <tr>
+    <td id="previous-slide-cont"  width="30%">
+      <b> Previous slide </b><br>
+      <canvas id="previous-slide-canv" style="border:1px  solid black"></canvas>
+    </td>
+  </tr>
+</table>
 
-<p>
-<b> Next slide </b><br>
-<canvas id="next-slide" style="border:1px  solid black" width="25%"></canvas><br>
-</p>
-
-<p>
-<b> Current slide </b><br>
-<canvas id="current-slide" style="border:1px  solid black" width="25%"></canvas><br>
-</p>
-
-<p>
-<b> Previous slide </b><br>
-<canvas id="previous-slide" style="border:1px  solid black" width="25%"></canvas><br>
-</p>
 
 <script src="js/pdf.js"></script>
 <script src="js/jquery-3.4.1.js"></script>
@@ -34,7 +64,55 @@
   // If absolute URL from the remote server is provided, configure the CORS
   // header on that server.
   //
+  // from https://davidwalsh.name/javascript-debounce-function
+  // this definitely should be somewhere available...
+  function debounce(func, wait, immediate) {
+    var timeout;
+    return function() {
+      var context = this, args = arguments;
+      var later = function() {
+      	timeout = null;
+      	if (!immediate) func.apply(context, args);
+      };
+      var callNow = immediate && !timeout;
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+      if (callNow) func.apply(context, args);
+    };
+  };
 
+  timerState = {value: 0, id: 0};
+
+  function renderTimer(val) {
+    var timer = $("#timer-display");
+    var hours = Math.floor(val / 3600);
+    var minutes = Math.floor((val - 3600*hours)/60);
+    var seconds = (val - 3600*hours - 60*minutes);
+    $(timer).text(hours + ":" + minutes + ":" + seconds);
+  }
+
+  renderTimer(0);
+
+  function timerRunning() {
+    console.log(timerState)
+    timerState.value +=1;
+    console.log("tick")
+    renderTimer(timerState.value);
+  }
+
+  $("#timer-start").click(function(event) {
+    console.log("start timer")
+    timerState.id = window.setInterval(timerRunning, 1000);
+  });
+
+  $("#timer-stop").click(function(event) {
+    window.clearInterval(timerState.id);
+  });
+
+  $("#timer-reset").click(function(event) {
+    timerState.value = 0;
+    renderTimer(0);
+  });
 
 
   var channel = new BroadcastChannel('slides');
@@ -48,31 +126,36 @@
   var url = "";
   var baseurl = "http://localhost:8000/";
 
-  nextCanvas = document.getElementById('next-slide');
-  currentCanvas = document.getElementById('current-slide');
-  prevCanvas = document.getElementById('previous-slide');
+  nextCanvas = document.getElementById('next-slide-canv');
+  currentCanvas = document.getElementById('current-slide-canv');
+  prevCanvas = document.getElementById('previous-slide-canv');
 
+  nextCanvasCont = document.getElementById('next-slide-cont');
+  currentCanvasCont = document.getElementById('current-slide-cont');
+  prevCanvasCont = document.getElementById('previous-slide-cont');
 
+  function renderPage(canvas, cont, page) {
+    var viewport = page.getViewport({scale: 1});
+    console.log(cont.id)
+    //var scale = 0.75;
+    //var viewport = page.getViewport({ scale: scale, });
+    // FIXME: 2 needs to be subtracted from the dimensions probably
+    // because of some margin of padding or something.
+    cwidth = $(cont).width() - 2
+    cheight = $(cont).height() - 2
+    console.log(cwidth);
+    var context = canvas.getContext('2d');
+    scale = cwidth/viewport.width;
+    viewport = page.getViewport({scale: scale})
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    console.log(canvas.height)
 
-
-  function renderPage(canvas, page) {
-        var scale = 0.75;
-        var viewport = page.getViewport({ scale: scale, });
-
-        // Prepare canvas using PDF page dimensions
-        //
-        //var canvas = document.getElementById('the-canvas');
-        var context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        //
-        // Render PDF page into canvas context
-        //
-        var renderContext = {
-          canvasContext: context,
-          viewport: viewport,
-        };
-        page.render(renderContext);
+    var renderContext = {
+      canvasContext: context,
+      viewport: viewport,
+    };
+    page.render(renderContext);
    }
 
    $("#reset").click(function(event){
@@ -87,27 +170,31 @@
 
       var loadingTask = pdfjsLib.getDocument(url);
       loadingTask.promise.then(function(pdf) {
-
          function refresh(npage) {
-            pdf.getPage(npage+1).then(function(page){
-               renderPage(nextCanvas, page);
-            });
+           $("#page-count").text(npage +"/" + pdf.numPages);
+            if (npage < pdf.numPages) {
+              pdf.getPage(npage+1).then(function(page){
+                renderPage(nextCanvas, nextCanvasCont, page);
+              });
+            }
             pdf.getPage(npage).then(function(page){
-               renderPage(currentCanvas, page);
+               renderPage(currentCanvas,currentCanvasCont, page);
             });
             if(npage-1 > 0) {
                pdf.getPage(npage-1).then(function(page){
-                  renderPage(prevCanvas, page);
+                  renderPage(prevCanvas,prevCanvasCont, page);
                });
             }
          };
 
-         $(document).keypress(function(event) {
+         $(document).keypress(debounce(function(event) {
            if(event.key == "s"){
                console.log("next");
-               nPage = nPage+1
-               channel.postMessage(JSON.stringify({toslide: nPage}))
-               refresh(nPage);
+               if(pdf.numPages > nPage) {
+                 nPage = nPage+1
+                 channel.postMessage(JSON.stringify({toslide: nPage}))
+                 refresh(nPage);
+               }
            }
            else if(event.key == "a") {
                console.log("prev");
@@ -115,7 +202,7 @@
                channel.postMessage(JSON.stringify({toslide: nPage}))
                refresh(nPage);
            }
-         });
+         }, 100));
          refresh(nPage);
       });
    });
